@@ -1,11 +1,13 @@
 #include <WiFi.h>
-#include <WebServer.h>
+#include <WiFiUdp.h>
+#include <Arduino.h>
 
 // Wi-Fi Access Point credentials
-const char* ssid = "RC_Car_AP";
-const char* password = "12345678";
+const char *ssid = "RC_Car_AP";
+const char *password = "12345678";
 
-WebServer server(80);
+WiFiUDP udp;
+const uint16_t listenPort = 4210;
 
 // Motor pins
 #define LF_IN1 27
@@ -13,7 +15,7 @@ WebServer server(80);
 #define RF_IN3 25
 #define RF_IN4 33
 #define ENA 14
-#define ENB 32 
+#define ENB 32
 
 // PWM channels
 #define CH_A 0
@@ -24,7 +26,8 @@ WebServer server(80);
 int speed = 200;
 
 // Motor setup
-void setupMotors() {
+void setupMotors()
+{
   pinMode(LF_IN1, OUTPUT);
   pinMode(LF_IN2, OUTPUT);
   pinMode(RF_IN3, OUTPUT);
@@ -42,82 +45,109 @@ void setupMotors() {
 }
 
 // Motor control functions
-void stopCar() {
-  digitalWrite(LF_IN1, LOW); digitalWrite(LF_IN2, LOW);
-  digitalWrite(RF_IN3, LOW); digitalWrite(RF_IN4, LOW);
+void stopCar()
+{
+  digitalWrite(LF_IN1, LOW);
+  digitalWrite(LF_IN2, LOW);
+  digitalWrite(RF_IN3, LOW);
+  digitalWrite(RF_IN4, LOW);
 }
 
-void forward() {
-  digitalWrite(LF_IN1, HIGH); digitalWrite(LF_IN2, LOW);
-  digitalWrite(RF_IN3, HIGH); digitalWrite(RF_IN4, LOW);
+void forward()
+{
+  digitalWrite(LF_IN1, HIGH);
+  digitalWrite(LF_IN2, LOW);
+  digitalWrite(RF_IN3, HIGH);
+  digitalWrite(RF_IN4, LOW);
 }
 
-void backward() {
-  digitalWrite(LF_IN1, LOW); digitalWrite(LF_IN2, HIGH);
-  digitalWrite(RF_IN3, LOW); digitalWrite(RF_IN4, HIGH);
+void backward()
+{
+  digitalWrite(LF_IN1, LOW);
+  digitalWrite(LF_IN2, HIGH);
+  digitalWrite(RF_IN3, LOW);
+  digitalWrite(RF_IN4, HIGH);
 }
 
-void left() {
-  digitalWrite(LF_IN1, LOW); digitalWrite(LF_IN2, HIGH);
-  digitalWrite(RF_IN3, HIGH); digitalWrite(RF_IN4, LOW);
+void left()
+{
+  digitalWrite(LF_IN1, LOW);
+  digitalWrite(LF_IN2, HIGH);
+  digitalWrite(RF_IN3, HIGH);
+  digitalWrite(RF_IN4, LOW);
 }
 
-void right() {
-  digitalWrite(LF_IN1, HIGH); digitalWrite(LF_IN2, LOW);
-  digitalWrite(RF_IN3, LOW); digitalWrite(RF_IN4, HIGH);
+void right()
+{
+  digitalWrite(LF_IN1, HIGH);
+  digitalWrite(LF_IN2, LOW);
+  digitalWrite(RF_IN3, LOW);
+  digitalWrite(RF_IN4, HIGH);
 }
 
-// Web page handler
-void handleRoot() {
-  String html = R"rawliteral(
-    <html>
-    <head>
-      <title>ESP32 RC Car</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>
-        body { background:#111; color:white; text-align:center; font-family:Arial; }
-        button { width:100px; height:60px; margin:10px; font-size:20px; border:none; border-radius:10px; background:#673AB7; color:white; }
-        button:active { background:#9575CD; }
-      </style>
-    </head>
-    <body>
-      <h2>ESP32 Wi-Fi RC Car</h2>
-      <div>
-        <button onclick="fetch('/forward')">Forward</button><br>
-        <button onclick="fetch('/left')">Left</button>
-        <button onclick="fetch('/stop')">Stop</button>
-        <button onclick="fetch('/right')">Right</button><br>
-        <button onclick="fetch('/backward')">Backward</button>
-      </div>
-    </body>
-    </html>
-  )rawliteral";
-
-  server.send(200, "text/html", html);
-}
-
-void setup() {
+void setup()
+{
   Serial.begin(115200);
+  delay(50);
   setupMotors();
 
   WiFi.softAP(ssid, password);
-  Serial.println("Connect to Wi-Fi AP:");
-  Serial.println(ssid);
-  Serial.println("Password: 12345678");
+  IPAddress AP_IP = WiFi.softAPIP();
+  Serial.println("AP started");
   Serial.print("AP IP: ");
-  Serial.println(WiFi.softAPIP());
+  Serial.println(AP_IP);
+  Serial.print("SSID: ");
+  Serial.println(ssid);
+  Serial.print("Password: ");
+  Serial.println(password);
 
-  server.on("/", handleRoot);
-  server.on("/forward", [](){ forward(); server.send(200,"text/plain","F"); });
-  server.on("/backward", [](){ backward(); server.send(200,"text/plain","B"); });
-  server.on("/left", [](){ left(); server.send(200,"text/plain","L"); });
-  server.on("/right", [](){ right(); server.send(200,"text/plain","R"); });
-  server.on("/stop", [](){ stopCar(); server.send(200,"text/plain","S"); });
-
-  server.begin();
-  Serial.println("Web server started");
+  // Start UDP listener
+  udp.begin(listenPort);
+  Serial.print("UDP listening on port....");
+  Serial.println(listenPort);
 }
 
-void loop() {
-  server.handleClient();
-}
+void loop()
+{
+  int packetSize = udp.parsePacket();
+  if (packetSize)
+  {
+    char buf[32];
+    int len = udp.read(buf, sizeof(buf) - 1);
+    if (len > 0)
+    {
+      buf[len] = 0;
+    }
+    Serial.print("Received packet: ");
+    Serial.println(buf);
+
+    char cmd = buf[0];
+    switch (cmd)
+    {
+    case 'F':
+      //forward();
+      Serial.println("=> FORWARD");
+      break;
+    case 'B':
+      //backward();
+      Serial.println("=> BACKWARD");
+      break;
+    case 'L':
+      //left();
+      Serial.println("=> LEFT");
+      break;
+    case 'R':
+      //right();
+      Serial.println("=> RIGHT");
+      break;
+    case 'S':
+      //stopCar();
+      Serial.println("=> STOP");
+      break;
+    default:
+      //stopCar();
+      Serial.println("=> UNKNOWN -> STOP");
+      break;
+    }
+  }
+}  
